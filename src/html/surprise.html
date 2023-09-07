@@ -6,7 +6,7 @@
 <!--[if !IE]><!--><html lang="en"><!-- <![endif]-->
 
 <head>
-  <title>Happy Birthday Savita</title>
+  <title>Happy Birthday Samkisha</title>
   <meta charset="UTF-8" />
   <meta name="description" content="Happy Birthday Savita">
   <link rel="icon" href="../../images/others/favicon.ico" type="image/x-icon" />
@@ -30,89 +30,20 @@
 </head>
 <style>
 
-.inline-blocks > .block{
-  display: inline-block;
-  vertical-align: middle;
-}
-.image{
-  height: 140px;
-  width: 140px;
-  border-radius: 180px;
-  border: 3px solid #fff;
-  margin-top: 22px;
-  margin-right: 40px;
-  
+
+
+/* basic styles for black background and crosshair cursor */
+body {
+	background: #000;
+	margin: 0;
 }
 
-.twenty-one{
-  font-size: 240px;
-  font-family: 'Josefin Sans';
-  font-weight: 100;
-  line-height: 180px;
-  color: #fff;
+canvas {
+	cursor: crosshair;
+	display: block;
 }
 
-.bday{
-  font-size: 24px;
-  color: #fff;
-  font-family: 'Josefin Sans';
-  font-weight: 300;
-  text-align: center;
-}
 
-.cover{
-  background: rgba(0,0,0,0.82);
-  width: 100%;
-  height: 100%;
-  top:0;
-  left: 0;
-  z-index: 1000;
-}
-
-#can{
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-}
-
-div {
-  overflow: auto;
-}
-.super-centered-container{
-  display:flex;
-  align-items: center;
-  justify-content: center;
-}
-
-html,body{
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  background:#131313;
-}
-
-a{
-  color: skyblue;
-  text-decoration: none;
-}
-
-.overlay-static{
-  position: relative;
-  z-index: 100;
-  margin-bottom: 100px;
-}
-
-#myvideo{
-  visibility: hidden;
-}
-
-body{
-  background: url('../../images/humans/together/collage.jpg');
-  background-position: center center;
-  background-size: cover;
-}
 </style>
 
 <div>
@@ -121,143 +52,301 @@ body{
      Your browser isn't invited for super fun audio time.
     </audio>
 </div>
-<div class="cover super-centered-container">
-  <canvas id="can">Get a browser</canvas>  
-  <div class="overlay-static" >    
-    <div class="inline-blocks">
-      <h2 class="twenty-one block">2</h2>
-      <img class="image block" src="../../images/humans/together/us1.jpg">
-      <h2 class="twenty-one block"> 2</h2>
-      <img class="image block" src="../../images/humans/together/us2.jpg">
-    </div>
-   
-    
-    <h1 class="bday">Happy Birthday <a target="_self" rel="noopener noreferrer" href="../../index.html"> Savita</a></h1>
-  </div>
-</div>
+<canvas id="canvas"></canvas>
+
 </html>
 
 <script>
 
-const TwoPI = Math.PI * 2;
-var w = window.innerWidth;
-var h = window.innerHeight;
-var center_x = w / 2;
-var center_y = h / 2;
+// when animating on canvas, it is best to use requestAnimationFrame instead of setTimeout or setInterval
+// not supported in all browsers though and sometimes needs a prefix, so we need a shim
+window.requestAnimFrame = ( function() {
+	return window.requestAnimationFrame ||
+				window.webkitRequestAnimationFrame ||
+				window.mozRequestAnimationFrame ||
+				function( callback ) {
+					window.setTimeout( callback, 1000 / 60 );
+				};
+})();
 
-var colors = ['#FF0000', '#E8D45B', '#8CFF00','#3F33FF','#FF3349','#33FFC7']
+// now we will setup our basic variables for the demo
+var canvas = document.getElementById( 'canvas' ),
+		ctx = canvas.getContext( '2d' ),
+		// full screen dimensions
+		cw = window.innerWidth,
+		ch = window.innerHeight,
+		// firework collection
+		fireworks = [],
+		// particle collection
+		particles = [],
+		// starting hue
+		hue = 120,
+		// when launching fireworks with a click, too many get launched at once without a limiter, one launch per 5 loop ticks
+		limiterTotal = 5,
+		limiterTick = 0,
+		// this will time the auto launches of fireworks, one launch per 80 loop ticks
+		timerTotal = 80,
+		timerTick = 0,
+		mousedown = false,
+		// mouse x coordinate,
+		mx,
+		// mouse y coordinate
+		my;
+		
+// set canvas dimensions
+canvas.width = cw;
+canvas.height = ch;
 
-// I know the abs is not needed... but oh well
-var max_distance = Math.abs(Math.max(center_x, center_y));
-var min_distance = Math.abs(Math.min(center_x, center_y));
-function Firefly(){
-  this.velocity = 0;
-  var random_angle = Math.random() * TwoPI;
-  this.x = center_x +  Math.sin(random_angle) * ((Math.random() * (max_distance - min_distance) + min_distance));
-  this.y = center_y + Math.cos(random_angle) * ((Math.random() * (max_distance - min_distance) + min_distance));
+// now we are going to setup our function placeholders for the entire demo
 
-  
-  
-  this.angle_of_attack = Math.atan2(  this.y - center_y ,  this.x - center_x);
-  this.vel =  ( Math.random() * 50 ) + 20 ;
-  
-  this.color = colors[ ~~(colors.length * Math.random()) ]
-  
-  
-  this.xvel = this.vel * Math.cos( this.angle_of_attack );
-  this.yvel = this.vel * Math.sin( this.angle_of_attack );
-  this.size = 2 + Math.random() * 2;
-  
-  this.phase_diff = Math.random() * TwoPI;
-    
+// get a random number within a range
+function random( min, max ) {
+	return Math.random() * ( max - min ) + min;
+}
+
+// calculate the distance between two points
+function calculateDistance( p1x, p1y, p2x, p2y ) {
+	var xDistance = p1x - p2x,
+			yDistance = p1y - p2y;
+	return Math.sqrt( Math.pow( xDistance, 2 ) + Math.pow( yDistance, 2 ) );
+}
+
+// create firework
+function Firework( sx, sy, tx, ty ) {
+	// actual coordinates
+	this.x = sx;
+	this.y = sy;
+	// starting coordinates
+	this.sx = sx;
+	this.sy = sy;
+	// target coordinates
+	this.tx = tx;
+	this.ty = ty;
+	// distance from starting point to target
+	this.distanceToTarget = calculateDistance( sx, sy, tx, ty );
+	this.distanceTraveled = 0;
+	// track the past coordinates of each firework to create a trail effect, increase the coordinate count to create more prominent trails
+	this.coordinates = [];
+	this.coordinateCount = 3;
+	// populate initial coordinate collection with the current coordinates
+	while( this.coordinateCount-- ) {
+		this.coordinates.push( [ this.x, this.y ] );
+	}
+	this.angle = Math.atan2( ty - sy, tx - sx );
+	this.speed = 2;
+	this.acceleration = 1.05;
+	this.brightness = random( 50, 70 );
+	// circle target indicator radius
+	this.targetRadius = 1;
+}
+
+// update firework
+Firework.prototype.update = function( index ) {
+	// remove last item in coordinates array
+	this.coordinates.pop();
+	// add current coordinates to the start of the array
+	this.coordinates.unshift( [ this.x, this.y ] );
+	
+	// cycle the circle target indicator radius
+	if( this.targetRadius < 8 ) {
+		this.targetRadius += 0.3;
+	} else {
+		this.targetRadius = 1;
+	}
+	
+	// speed up the firework
+	this.speed *= this.acceleration;
+	
+	// get the current velocities based on angle and speed
+	var vx = Math.cos( this.angle ) * this.speed,
+			vy = Math.sin( this.angle ) * this.speed;
+	// how far will the firework have traveled with velocities applied?
+	this.distanceTraveled = calculateDistance( this.sx, this.sy, this.x + vx, this.y + vy );
+	
+	// if the distance traveled, including velocities, is greater than the initial distance to the target, then the target has been reached
+	if( this.distanceTraveled >= this.distanceToTarget ) {
+		createParticles( this.tx, this.ty );
+		// remove the firework, use the index passed into the update function to determine which to remove
+		fireworks.splice( index, 1 );
+	} else {
+		// target not reached, keep traveling
+		this.x += vx;
+		this.y += vy;
+	}
+}
+
+// draw firework
+Firework.prototype.draw = function() {
+	ctx.beginPath();
+	// move to the last tracked coordinate in the set, then draw a line to the current x and y
+	ctx.moveTo( this.coordinates[ this.coordinates.length - 1][ 0 ], this.coordinates[ this.coordinates.length - 1][ 1 ] );
+	ctx.lineTo( this.x, this.y );
+	ctx.strokeStyle = 'hsl(' + hue + ', 100%, ' + this.brightness + '%)';
+	ctx.stroke();
+	
+	ctx.beginPath();
+	// draw the target for this firework with a pulsing circle
+	ctx.arc( this.tx, this.ty, this.targetRadius, 0, Math.PI * 2 );
+	ctx.stroke();
+}
+
+// create particle
+function Particle( x, y ) {
+	this.x = x;
+	this.y = y;
+	// track the past coordinates of each particle to create a trail effect, increase the coordinate count to create more prominent trails
+	this.coordinates = [];
+	this.coordinateCount = 5;
+	while( this.coordinateCount-- ) {
+		this.coordinates.push( [ this.x, this.y ] );
+	}
+	// set a random angle in all possible directions, in radians
+	this.angle = random( 0, Math.PI * 2 );
+	this.speed = random( 1, 10 );
+	// friction will slow the particle down
+	this.friction = 0.95;
+	// gravity will be applied and pull the particle down
+	this.gravity = 1;
+	// set the hue to a random number +-20 of the overall hue variable
+	this.hue = random( hue - 20, hue + 20 );
+	this.brightness = random( 50, 80 );
+	this.alpha = 1;
+	// set how fast the particle fades out
+	this.decay = random( 0.015, 0.03 );
+}
+
+// update particle
+Particle.prototype.update = function( index ) {
+	// remove last item in coordinates array
+	this.coordinates.pop();
+	// add current coordinates to the start of the array
+	this.coordinates.unshift( [ this.x, this.y ] );
+	// slow down the particle
+	this.speed *= this.friction;
+	// apply velocity
+	this.x += Math.cos( this.angle ) * this.speed;
+	this.y += Math.sin( this.angle ) * this.speed + this.gravity;
+	// fade out the particle
+	this.alpha -= this.decay;
+	
+	// remove the particle once the alpha is low enough, based on the passed in index
+	if( this.alpha <= this.decay ) {
+		particles.splice( index, 1 );
+	}
 }
 
 
 
-Firefly.prototype.move = function(dt){
-  if( isOnHeart(this.x, this.y)){
-    this.size -= 0.001;
-    return;
-  }
-  this.x += this.xvel * dt;
-  this.y += this.yvel * dt;
-}
-
-Firefly.prototype.render = function(ctx, now){
-  if( this.size < 1) {
-    return;
-  }
-  ctx.globalAlpha = Math.max(Math.abs(Math.sin( (now + this.phase_diff) / (~~(this.size * 100)) )), 0.4);
-  ctx.fillStyle = this.color;
-  ctx.shadowColor = this.color;
-  ctx.shadowBlur = 20 / this.size; 
-  ctx.beginPath();
-  ctx.arc( this.x, this.y, this.size, 0, TwoPI, false);
-  ctx.closePath();
-  ctx.fill();
-}
-
-var max_fireflies = 500;
-var canvas = document.getElementById('can');
-var ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-var fireflies = [];
-
-
-var last = Date.now();
-var dt = 0, now = 0;
-var alive_fireflies = 0;
-var last_emit = 0;
-
-function render(){
-  var audio = document.getElementById("hbd");
-  audio.play();
-  now = Date.now();
-  dt = (last - now) / 1000; 
-  last = now;
-  ctx.clearRect(0,0,w,h);
-  fireflies.forEach(function(f){
-    f.move(dt);
-    f.render(ctx, now);    
-  });
+// draw particle
+Particle.prototype.draw = function() {
+	  
+  ctx. beginPath();
+	// move to the last tracked coordinates in the set, then draw a line to the current x and y
+	ctx.moveTo( this.coordinates[ this.coordinates.length - 1 ][ 0 ], this.coordinates[ this.coordinates.length - 1 ][ 1 ] );
+	ctx.lineTo( this.x, this.y );
+	ctx.strokeStyle = 'hsla(' + this.hue + ', 100%, ' + this.brightness + '%, ' + this.alpha + ')';
+	ctx.stroke();
   
-  fireflies = fireflies.filter(function(f){
-    return (f.size > 1);
-  });
-
-  alive_fireflies = fireflies.length;  
   
-  if( alive_fireflies < max_fireflies && last_emit - now < - 100){
-    fireflies.push( new Firefly());
-    last_emit = now;
-  }
+}
+
+// create particle group/explosion
+function createParticles( x, y ) {
+	// increase the particle count for a bigger explosion, beware of the canvas performance hit with the increased particles though
+	var particleCount = 30;
+	while( particleCount-- ) {
+		particles.push( new Particle( x, y ) );
+	}
+}
+
+// main demo loop
+function loop() {
+	// this function will run endlessly with requestAnimationFrame
+	requestAnimFrame( loop );
+	
+	// increase the hue to get different colored fireworks over time
+	hue += 0.5;
+	
+	// normally, clearRect() would be used to clear the canvas
+	// we want to create a trailing effect though
+	// setting the composite operation to destination-out will allow us to clear the canvas at a specific opacity, rather than wiping it entirely
+	ctx.globalCompositeOperation = 'destination-out';
+	// decrease the alpha property to create more prominent trails
+	ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+	ctx.fillRect( 0, 0, cw, ch );
+	// change the composite operation back to our main mode
+	// lighter creates bright highlight points as the fireworks and particles overlap each other
+	ctx.globalCompositeOperation = 'lighter';
+	
+    var text = "HAPPY BIRTHDAY Samiksha !!";  
+  ctx.font = "50px sans-serif";
+  var textData = ctx.measureText(text);
+  ctx.fillStyle = "rgba("+parseInt(random(0,255))+","+parseInt(random(0,255))+","+parseInt(random(0,255))+",0.3)";
+  ctx.fillText(text,cw /2-textData.width/2,ch/2); 
   
-  requestAnimationFrame(render);
+	// loop over each firework, draw it, update it
+	var i = fireworks.length;
+	while( i-- ) {
+		fireworks[ i ].draw();
+		fireworks[ i ].update( i );
+	}
+	
+	// loop over each particle, draw it, update it
+	var i = particles.length;
+	while( i-- ) {
+		particles[ i ].draw();
+		particles[ i ].update( i );
+	}
+	
+	// launch fireworks automatically to random coordinates, when the mouse isn't down
+	if( timerTick >= timerTotal ) {
+		if( !mousedown ) {
+			// start the firework at the bottom middle of the screen, then set the random target coordinates, the random y coordinates will be set within the range of the top half of the screen
+      
+      for(var h=0;h<50;h++)
+      {
+           fireworks.push( new Firework( cw / 2, ch/2, random( 0, cw ), random( 0, ch  ) ) );
+      }
+      
+      
+			timerTick = 0;
+		}
+	} else {
+		timerTick++;
+	}
+	
+	// limit the rate at which fireworks get launched when mouse is down
+	if( limiterTick >= limiterTotal ) {
+		if( mousedown ) {
+			// start the firework at the bottom middle of the screen, then set the current mouse coordinates as the target
+			fireworks.push( new Firework( cw / 2, ch/2, mx, my ) );
+			limiterTick = 0;
+		}
+	} else {
+		limiterTick++;
+	}
 }
 
-render();
+// mouse event bindings
+// update the mouse coordinates on mousemove
+canvas.addEventListener( 'mousemove', function( e ) {
+	mx = e.pageX - canvas.offsetLeft;
+	my = e.pageY - canvas.offsetTop;
+});
 
-// 
-function isOnHeart(x,y){
-	  x = ((x - center_x) / (min_distance * 1.2)) * 1.8;
-	  y = ((y - center_y) / (min_distance)) * - 1.8;
+// toggle mousedown state and prevent canvas from being selected
+canvas.addEventListener( 'mousedown', function( e ) {
+	e.preventDefault();
+	mousedown = true;
+});
 
-    var x2 = x * x;
-  	var y2 = y * y;
-    // Simplest Equation of lurve
-    return (Math.pow((x2 + y2 - 1), 3) - (x2 * (y2 * y)) <= 0);
-}
+canvas.addEventListener( 'mouseup', function( e ) {
+	e.preventDefault();
+	mousedown = false;
+});
 
-function HideOrShow(cur_div){ 
-  var current=document.getElementById(cur_div);
-  if(current.style.visibility=="hidden") {
-    current.style.visibility ="visible";
-  }
-  else {
-    current.style.visibility ="hidden";
-  }
-}
+// once the window loads, we are ready for some fireworks!
+window.onload = loop;
+
 
 </script>
